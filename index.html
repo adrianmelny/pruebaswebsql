@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Demo Supabase</title>
+</head>
+<body>
+  <h1>Conexión a Supabase</h1>
+  <button id="btn">Agregar dato</button>
+  <ul id="lista"></ul>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    const supabase = createClient(
+      "https://crsjimftjwevpfcqjmhu.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc2ppbWZ0andldnBmY3FqbWh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxNDY0MjAsImV4cCI6MjA3MzcyMjQyMH0.y-j95MWGnSrKYvIua7lxMsYYVywclJjSeSJvvBLl9hw"
+    );
+
+    const lista = document.getElementById("lista");
+
+    // Cargar registros existentes
+    async function cargar() {
+      const { data, error } = await supabase.from("items").select("*").order("id", { ascending: false });
+      if (error) {
+        console.error(error);
+        return;
+      }
+      lista.innerHTML = "";
+      data.forEach(row => {
+        const li = document.createElement("li");
+        li.textContent = `${row.id}: ${row.nombre} - ${row.descripcion ?? ""}`;
+        lista.appendChild(li);
+      });
+    }
+
+    // Insertar un nuevo registro al hacer click
+    document.getElementById("btn").addEventListener("click", async () => {
+      await supabase.from("items").insert([{ nombre: "Ejemplo", descripcion: "Prueba desde HTML" }]);
+      cargar();
+    });
+
+    cargar();
+  </script>
+</body>
+</html>
