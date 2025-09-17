@@ -2,45 +2,84 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Demo Supabase</title>
+  <title>Panel CRUD Supabase</title>
 </head>
 <body>
-  <h1>Conexión a Supabase</h1>
-  <button id="btn">Agregar dato</button>
-  <ul id="lista"></ul>
+  <h1>Gestión de Items</h1>
+
+  <!-- Formulario para agregar -->
+  <form id="addForm">
+    <input type="text" id="nombre" placeholder="Nombre" required>
+    <input type="text" id="descripcion" placeholder="Descripción">
+    <button type="submit">Agregar</button>
+  </form>
+
+  <h2>Lista de Items</h2>
+  <table border="1" id="tabla">
+    <thead>
+      <tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Acciones</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
     const supabase = createClient(
-      "https://crsjimftjwevpfcqjmhu.supabase.co",
+      "https://crsjimftjwevpfcqjmhu.supabase.co", // tu proyecto
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc2ppbWZ0andldnBmY3FqbWh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxNDY0MjAsImV4cCI6MjA3MzcyMjQyMH0.y-j95MWGnSrKYvIua7lxMsYYVywclJjSeSJvvBLl9hw"
     );
 
-    const lista = document.getElementById("lista");
+    const tabla = document.querySelector("#tabla tbody");
+    const form = document.getElementById("addForm");
 
-    // Cargar registros existentes
-    async function cargar() {
+    // Cargar registros
+    async function cargarItems() {
       const { data, error } = await supabase.from("items").select("*").order("id", { ascending: false });
       if (error) {
         console.error(error);
         return;
       }
-      lista.innerHTML = "";
-      data.forEach(row => {
-        const li = document.createElement("li");
-        li.textContent = `${row.id}: ${row.nombre} - ${row.descripcion ?? ""}`;
-        lista.appendChild(li);
+      tabla.innerHTML = "";
+      data.forEach(item => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+          <td>${item.id}</td>
+          <td contenteditable="true" data-id="${item.id}" data-campo="nombre">${item.nombre}</td>
+          <td contenteditable="true" data-id="${item.id}" data-campo="descripcion">${item.descripcion ?? ""}</td>
+          <td><button onclick="eliminar(${item.id})">Borrar</button></td>
+        `;
+        tabla.appendChild(fila);
       });
     }
 
-    // Insertar un nuevo registro al hacer click
-    document.getElementById("btn").addEventListener("click", async () => {
-      await supabase.from("items").insert([{ nombre: "Ejemplo", descripcion: "Prueba desde HTML" }]);
-      cargar();
+    // Agregar registro
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const nombre = document.getElementById("nombre").value;
+      const descripcion = document.getElementById("descripcion").value;
+      await supabase.from("items").insert([{ nombre, descripcion }]);
+      form.reset();
+      cargarItems();
     });
 
-    cargar();
+    // Editar en línea
+    tabla.addEventListener("blur", async (e) => {
+      if (e.target.hasAttribute("contenteditable")) {
+        const id = e.target.dataset.id;
+        const campo = e.target.dataset.campo;
+        const valor = e.target.innerText;
+        await supabase.from("items").update({ [campo]: valor }).eq("id", id);
+      }
+    }, true);
+
+    // Eliminar registro
+    window.eliminar = async (id) => {
+      await supabase.from("items").delete().eq("id", id);
+      cargarItems();
+    };
+
+    cargarItems();
   </script>
 </body>
 </html>
