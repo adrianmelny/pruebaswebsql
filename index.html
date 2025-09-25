@@ -12,6 +12,33 @@
     td[contenteditable="true"] { background: #f9f9f9; }
     form { margin-bottom: 20px; }
     input, select, button { margin: 5px; padding: 5px; }
+    
+    /* Estilos para el log */
+    .log-container {
+      margin-top: 30px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+      background-color: #f5f5f5;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .log-entry {
+      padding: 5px;
+      margin: 2px 0;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .log-success { background-color: #d4edda; color: #155724; }
+    .log-error { background-color: #f8d7da; color: #721c24; }
+    .log-info { background-color: #d1ecf1; color: #0c5460; }
+    .log-warning { background-color: #fff3cd; color: #856404; }
   </style>
 </head>
 <body>
@@ -47,6 +74,15 @@
     <tbody></tbody>
   </table>
 
+  <!-- Sección de Log -->
+  <div class="log-container">
+    <div class="log-header">
+      <h2>Log de Actividades</h2>
+      <button id="descargarLog">Descargar Log</button>
+    </div>
+    <div id="logContent"></div>
+  </div>
+
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
@@ -60,11 +96,54 @@
     const formCategoria = document.getElementById("formCategoria");
     const formItem = document.getElementById("formItem");
     const selCategoria = document.getElementById("itemCategoria");
+    const logContent = document.getElementById("logContent");
+    const descargarLogBtn = document.getElementById("descargarLog");
+
+    // ---------- SISTEMA DE LOG ----------
+    function agregarLog(mensaje, tipo = "info") {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement("div");
+      logEntry.className = `log-entry log-${tipo}`;
+      logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${mensaje}`;
+      logContent.appendChild(logEntry);
+      logContent.scrollTop = logContent.scrollHeight; // Auto-scroll al final
+    }
+
+    // Función para descargar el log
+    descargarLogBtn.addEventListener("click", () => {
+      const logEntries = logContent.querySelectorAll(".log-entry");
+      let logText = "Log de Actividades - Panel CRUD Supabase\n";
+      logText += "============================================\n\n";
+      
+      logEntries.forEach(entry => {
+        const texto = entry.textContent || entry.innerText;
+        logText += texto + "\n";
+      });
+      
+      const blob = new Blob([logText], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `log_${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      agregarLog("Log descargado exitosamente", "success");
+    });
 
     // ---------- CATEGORÍAS ----------
     async function cargarCategorias() {
+      agregarLog("Cargando categorías...", "info");
+      
       const { data, error } = await supabase.from("categorias").select("*").order("id", { ascending: true });
-      if (error) return console.error(error);
+      if (error) {
+        agregarLog(`Error al cargar categorías: ${error.message}`, "error");
+        return console.error(error);
+      }
+
+      agregarLog(`Se cargaron ${data.length} categorías`, "success");
 
       // llenar tabla
       tablaCategorias.innerHTML = "";
@@ -90,7 +169,17 @@
     formCategoria.addEventListener("submit", async (e) => {
       e.preventDefault();
       const nombre = document.getElementById("catNombre").value;
-      await supabase.from("categorias").insert([{ nombre }]);
+      
+      agregarLog(`Intentando agregar categoría: "${nombre}"`, "info");
+      
+      const { error } = await supabase.from("categorias").insert([{ nombre }]);
+      
+      if (error) {
+        agregarLog(`Error al agregar categoría: ${error.message}`, "error");
+      } else {
+        agregarLog(`Categoría "${nombre}" agregada exitosamente`, "success");
+      }
+      
       formCategoria.reset();
       cargarCategorias();
     });
@@ -100,24 +189,51 @@
         const id = e.target.dataset.id;
         const campo = e.target.dataset.campo;
         const valor = e.target.innerText;
-        await supabase.from("categorias").update({ [campo]: valor }).eq("id", id);
+        
+        agregarLog(`Actualizando categoría ID ${id}, campo "${campo}" a: "${valor}"`, "info");
+        
+        const { error } = await supabase.from("categorias").update({ [campo]: valor }).eq("id", id);
+        
+        if (error) {
+          agregarLog(`Error al actualizar categoría: ${error.message}`, "error");
+        } else {
+          agregarLog(`Categoría ID ${id} actualizada exitosamente`, "success");
+        }
       }
     }, true);
 
     window.eliminarCategoria = async (id) => {
-      await supabase.from("categorias").delete().eq("id", id);
+      if (!confirm("¿Está seguro de que desea eliminar esta categoría?")) return;
+      
+      agregarLog(`Intentando eliminar categoría ID ${id}`, "warning");
+      
+      const { error } = await supabase.from("categorias").delete().eq("id", id);
+      
+      if (error) {
+        agregarLog(`Error al eliminar categoría: ${error.message}`, "error");
+      } else {
+        agregarLog(`Categoría ID ${id} eliminada exitosamente`, "success");
+      }
+      
       cargarCategorias();
       cargarItems();
     };
 
     // ---------- ITEMS ----------
     async function cargarItems() {
+      agregarLog("Cargando items...", "info");
+      
       const { data, error } = await supabase
         .from("items")
         .select("id, nombre, descripcion, categoria_id, categorias(nombre)")
         .order("id", { ascending: false });
 
-      if (error) return console.error(error);
+      if (error) {
+        agregarLog(`Error al cargar items: ${error.message}`, "error");
+        return console.error(error);
+      }
+
+      agregarLog(`Se cargaron ${data.length} items`, "success");
 
       tablaItems.innerHTML = "";
       data.forEach(it => {
@@ -138,7 +254,18 @@
       const nombre = document.getElementById("itemNombre").value;
       const descripcion = document.getElementById("itemDescripcion").value;
       const categoria_id = selCategoria.value;
-      await supabase.from("items").insert([{ nombre, descripcion, categoria_id }]);
+      const categoria_nombre = selCategoria.options[selCategoria.selectedIndex].text;
+      
+      agregarLog(`Intentando agregar item: "${nombre}" (Categoría: ${categoria_nombre})`, "info");
+      
+      const { error } = await supabase.from("items").insert([{ nombre, descripcion, categoria_id }]);
+      
+      if (error) {
+        agregarLog(`Error al agregar item: ${error.message}`, "error");
+      } else {
+        agregarLog(`Item "${nombre}" agregado exitosamente`, "success");
+      }
+      
       formItem.reset();
       cargarItems();
     });
@@ -148,18 +275,40 @@
         const id = e.target.dataset.id;
         const campo = e.target.dataset.campo;
         const valor = e.target.innerText;
-        await supabase.from("items").update({ [campo]: valor }).eq("id", id);
+        
+        agregarLog(`Actualizando item ID ${id}, campo "${campo}" a: "${valor}"`, "info");
+        
+        const { error } = await supabase.from("items").update({ [campo]: valor }).eq("id", id);
+        
+        if (error) {
+          agregarLog(`Error al actualizar item: ${error.message}`, "error");
+        } else {
+          agregarLog(`Item ID ${id} actualizado exitosamente`, "success");
+        }
       }
     }, true);
 
     window.eliminarItem = async (id) => {
-      await supabase.from("items").delete().eq("id", id);
+      if (!confirm("¿Está seguro de que desea eliminar este item?")) return;
+      
+      agregarLog(`Intentando eliminar item ID ${id}`, "warning");
+      
+      const { error } = await supabase.from("items").delete().eq("id", id);
+      
+      if (error) {
+        agregarLog(`Error al eliminar item: ${error.message}`, "error");
+      } else {
+        agregarLog(`Item ID ${id} eliminado exitosamente`, "success");
+      }
+      
       cargarItems();
     };
 
     // Inicial
+    agregarLog("Inicializando aplicación...", "info");
     cargarCategorias();
     cargarItems();
+    agregarLog("Aplicación inicializada correctamente", "success");
   </script>
 </body>
 </html>
