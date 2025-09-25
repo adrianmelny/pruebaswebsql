@@ -3,21 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <title>Panel CRUD Supabase</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1, h2 { color: #333; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    table, th, td { border: 1px solid #aaa; }
+    th, td { padding: 8px; text-align: left; }
+    td[contenteditable="true"] { background: #f9f9f9; }
+    form { margin-bottom: 20px; }
+    input, select, button { margin: 5px; padding: 5px; }
+  </style>
 </head>
 <body>
-  <h1>Gestión de Items</h1>
+  <h1>Gestión con Supabase</h1>
 
-  <!-- Formulario para agregar -->
-  <form id="addForm">
-    <input type="text" id="nombre" placeholder="Nombre" required>
-    <input type="text" id="descripcion" placeholder="Descripción">
+  <!-- Formulario Categorías -->
+  <h2>Agregar Categoría</h2>
+  <form id="formCategoria">
+    <input type="text" id="catNombre" placeholder="Nombre categoría" required>
     <button type="submit">Agregar</button>
   </form>
 
-  <h2>Lista de Items</h2>
-  <table border="1" id="tabla">
+  <table id="tablaCategorias">
     <thead>
-      <tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Acciones</th></tr>
+      <tr><th>ID</th><th>Nombre</th><th>Acciones</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- Formulario Items -->
+  <h2>Agregar Item</h2>
+  <form id="formItem">
+    <input type="text" id="itemNombre" placeholder="Nombre" required>
+    <input type="text" id="itemDescripcion" placeholder="Descripción">
+    <select id="itemCategoria"></select>
+    <button type="submit">Agregar</button>
+  </form>
+
+  <table id="tablaItems">
+    <thead>
+      <tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Categoría</th><th>Acciones</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -30,41 +55,95 @@
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc2ppbWZ0andldnBmY3FqbWh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxNDY0MjAsImV4cCI6MjA3MzcyMjQyMH0.y-j95MWGnSrKYvIua7lxMsYYVywclJjSeSJvvBLl9hw"
     );
 
-    const tabla = document.querySelector("#tabla tbody");
-    const form = document.getElementById("addForm");
+    const tablaCategorias = document.querySelector("#tablaCategorias tbody");
+    const tablaItems = document.querySelector("#tablaItems tbody");
+    const formCategoria = document.getElementById("formCategoria");
+    const formItem = document.getElementById("formItem");
+    const selCategoria = document.getElementById("itemCategoria");
 
-    // Cargar registros
-    async function cargarItems() {
-      const { data, error } = await supabase.from("items").select("*").order("id", { ascending: false });
-      if (error) {
-        console.error(error);
-        return;
-      }
-      tabla.innerHTML = "";
-      data.forEach(item => {
+    // ---------- CATEGORÍAS ----------
+    async function cargarCategorias() {
+      const { data, error } = await supabase.from("categorias").select("*").order("id", { ascending: true });
+      if (error) return console.error(error);
+
+      // llenar tabla
+      tablaCategorias.innerHTML = "";
+      selCategoria.innerHTML = "";
+      data.forEach(cat => {
+        // tabla
         const fila = document.createElement("tr");
         fila.innerHTML = `
-          <td>${item.id}</td>
-          <td contenteditable="true" data-id="${item.id}" data-campo="nombre">${item.nombre}</td>
-          <td contenteditable="true" data-id="${item.id}" data-campo="descripcion">${item.descripcion ?? ""}</td>
-          <td><button onclick="eliminar(${item.id})">Borrar</button></td>
+          <td>${cat.id}</td>
+          <td contenteditable="true" data-id="${cat.id}" data-campo="nombre">${cat.nombre}</td>
+          <td><button onclick="eliminarCategoria(${cat.id})">Borrar</button></td>
         `;
-        tabla.appendChild(fila);
+        tablaCategorias.appendChild(fila);
+
+        // combo
+        const opt = document.createElement("option");
+        opt.value = cat.id;
+        opt.textContent = cat.nombre;
+        selCategoria.appendChild(opt);
       });
     }
 
-    // Agregar registro
-    form.addEventListener("submit", async (e) => {
+    formCategoria.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const nombre = document.getElementById("nombre").value;
-      const descripcion = document.getElementById("descripcion").value;
-      await supabase.from("items").insert([{ nombre, descripcion }]);
-      form.reset();
+      const nombre = document.getElementById("catNombre").value;
+      await supabase.from("categorias").insert([{ nombre }]);
+      formCategoria.reset();
+      cargarCategorias();
+    });
+
+    tablaCategorias.addEventListener("blur", async (e) => {
+      if (e.target.hasAttribute("contenteditable")) {
+        const id = e.target.dataset.id;
+        const campo = e.target.dataset.campo;
+        const valor = e.target.innerText;
+        await supabase.from("categorias").update({ [campo]: valor }).eq("id", id);
+      }
+    }, true);
+
+    window.eliminarCategoria = async (id) => {
+      await supabase.from("categorias").delete().eq("id", id);
+      cargarCategorias();
+      cargarItems();
+    };
+
+    // ---------- ITEMS ----------
+    async function cargarItems() {
+      const { data, error } = await supabase
+        .from("items")
+        .select("id, nombre, descripcion, categoria_id, categorias(nombre)")
+        .order("id", { ascending: false });
+
+      if (error) return console.error(error);
+
+      tablaItems.innerHTML = "";
+      data.forEach(it => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+          <td>${it.id}</td>
+          <td contenteditable="true" data-id="${it.id}" data-campo="nombre">${it.nombre}</td>
+          <td contenteditable="true" data-id="${it.id}" data-campo="descripcion">${it.descripcion ?? ""}</td>
+          <td>${it.categorias?.nombre ?? "-"}</td>
+          <td><button onclick="eliminarItem(${it.id})">Borrar</button></td>
+        `;
+        tablaItems.appendChild(fila);
+      });
+    }
+
+    formItem.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const nombre = document.getElementById("itemNombre").value;
+      const descripcion = document.getElementById("itemDescripcion").value;
+      const categoria_id = selCategoria.value;
+      await supabase.from("items").insert([{ nombre, descripcion, categoria_id }]);
+      formItem.reset();
       cargarItems();
     });
 
-    // Editar en línea
-    tabla.addEventListener("blur", async (e) => {
+    tablaItems.addEventListener("blur", async (e) => {
       if (e.target.hasAttribute("contenteditable")) {
         const id = e.target.dataset.id;
         const campo = e.target.dataset.campo;
@@ -73,12 +152,13 @@
       }
     }, true);
 
-    // Eliminar registro
-    window.eliminar = async (id) => {
+    window.eliminarItem = async (id) => {
       await supabase.from("items").delete().eq("id", id);
       cargarItems();
     };
 
+    // Inicial
+    cargarCategorias();
     cargarItems();
   </script>
 </body>
