@@ -73,7 +73,21 @@
     </thead>
     <tbody></tbody>
   </table>
-
+  <!-- Esquema / Diagrama BD -->
+  <h2>Esquema / Diagrama de la Base de Datos</h2>
+  <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap: wrap;">
+    <div style="flex:2; min-width: 300px;">
+      <div style="display:flex; justify-content: space-between; align-items:center;">
+        <strong>Diagrama ER (Mermaid)</strong>
+        <button id="refreshSchema">Actualizar diagrama</button>
+      </div>
+      <div id="dbDiagram" style="border:1px solid #ccc; padding:10px; margin-top:8px; overflow:auto;"></div>
+    </div>
+    <div style="flex:1; min-width: 260px;">
+      <strong>Resumen</strong>
+      <div id="dbSummary" style="border:1px solid #ccc; padding:10px; margin-top:8px; background:#fafafa;"></div>
+    </div>
+  </div>
   <!-- Sección de Log -->
   <div class="log-container">
     <div class="log-header">
@@ -83,6 +97,7 @@
     <div id="logContent"></div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
@@ -98,6 +113,9 @@
     const selCategoria = document.getElementById("itemCategoria");
     const logContent = document.getElementById("logContent");
     const descargarLogBtn = document.getElementById("descargarLog");
+    const dbDiagram = document.getElementById("dbDiagram");
+const dbSummary = document.getElementById("dbSummary");
+const refreshSchemaBtn = document.getElementById("refreshSchema");
 
     // ---------- SISTEMA DE LOG ----------
     function agregarLog(mensaje, tipo = "info") {
@@ -307,8 +325,101 @@
     // Inicial
     agregarLog("Inicializando aplicación...", "info");
     cargarCategorias();
+    construirDiagramaYResumen();
     cargarItems();
     agregarLog("Aplicación inicializada correctamente", "success");
+
+    // ---------- DIAGRAMA Y RESUMEN BD ----------
+function getFallbackColumns(nombreTabla) {
+  const mapa = {
+    categorias: ["id", "nombre"],
+    items: ["id", "nombre", "descripcion", "categoria_id"],
+  };
+  return mapa[nombreTabla] || [];
+}
+
+async function obtenerInfoTabla(nombreTabla) {
+  const { count, error: countError } = await supabase
+    .from(nombreTabla)
+    .select('*', { count: 'exact', head: true });
+
+  if (countError) {
+    agregarLog(`Error al contar filas en ${nombreTabla}: ${countError.message}`, 'error');
+  }
+
+  let columnas = [];
+  const { data: sample, error: sampleError } = await supabase
+    .from(nombreTabla)
+    .select('*')
+    .limit(1);
+
+  if (!sampleError && sample && sample.length > 0) {
+    columnas = Object.keys(sample[0]);
+  } else {
+    columnas = getFallbackColumns(nombreTabla);
+  }
+
+  return { nombre: nombreTabla, filas: count ?? 0, columnas };
+}
+
+function construirMermaidER(infoCategorias, infoItems) {
+  const columnasCat = infoCategorias.columnas.map(c => `    string ${c}`).join('\n');
+  const columnasItm = infoItems.columnas.map(c => `    string ${c}`).join('\n');
+
+  return `erDiagram
+  categorias {
+${columnasCat}
+  }
+  items {
+${columnasItm}
+  }
+  categorias ||--o{ items : "1 a N"`;
+}
+
+async function construirDiagramaYResumen() {
+  try {
+    if (window.mermaid && typeof window.mermaid.initialize === 'function') {
+      window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
+    }
+
+    const [infoCategorias, infoItems] = await Promise.all([
+      obtenerInfoTabla('categorias'),
+      obtenerInfoTabla('items'),
+    ]);
+
+    const mermaidSrc = construirMermaidER(infoCategorias, infoItems);
+
+    if (window.mermaid && typeof window.mermaid.render === 'function') {
+      const { svg } = await window.mermaid.render('db-er', mermaidSrc);
+      dbDiagram.innerHTML = svg;
+    } else {
+      dbDiagram.textContent = mermaidSrc;
+    }
+
+    dbSummary.innerHTML = '';
+    [infoCategorias, infoItems].forEach(info => {
+      const cont = document.createElement('div');
+      cont.style.marginBottom = '10px';
+      cont.innerHTML = `
+        <div><strong>Tabla:</strong> ${info.nombre}</div>
+        <div><strong>Filas:</strong> ${info.filas}</div>
+        <div><strong>Columnas:</strong> ${info.columnas.join(', ') || '-'}</div>
+      `;
+      dbSummary.appendChild(cont);
+    });
+
+    agregarLog('Diagrama y resumen de BD actualizados', 'success');
+  } catch (e) {
+    agregarLog(`Error al construir diagrama: ${e.message}`, 'error');
+    console.error(e);
+  }
+}
+
+if (refreshSchemaBtn) {
+  refreshSchemaBtn.addEventListener('click', () => {
+    construirDiagramaYResumen();
+  });
+}
   </script>
 </body>
 </html>
